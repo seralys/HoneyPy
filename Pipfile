@@ -14,10 +14,8 @@ verify_ssl = true
 dnslib = "==0.9.7"
 requests = "==2.6.0"
 Twisted = "==14.0.2"
-python-twitter = "==3.1"
 certifi = "*"
 "urllib3" = "*"
-pika = "==0.10.0"
 pylint = "*"
 "autopep8" = "*"
 
