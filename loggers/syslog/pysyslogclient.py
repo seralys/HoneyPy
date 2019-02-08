@@ -1,120 +1,304 @@
+
 # -*- coding: utf-8 -*-
-# HoneyPy Copyright (C) 2013-2017 foospidy
-# https://github.com/foospidy/HoneyPy
-# See LICENSE for details
-# Written by Seralys S.à.r.l
-import sys
+
+# Copyright (c) 2016, Alexander Böhm
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+from __future__ import division
+from __future__ import absolute_import
+
+version = u"0.1.1"
+
+import socket, sys
 from datetime import datetime
-from twisted.python import log
-import socket
-# prevent creation of compiled bytecode files
-sys.dont_write_bytecode = True
 
-# from https://stackoverflow.com/questions/3837744/how-to-resolve-dns-in-python
-"""
-Resolve the DNS/IP address of a given domain
-data returned is in the format:
-(name, aliaslist, addresslist)
-@filename resolveDNS.py
-@version 1.01 (python ver 2.7.3)
-@author LoanWolffe
-"""
-def getIP(d):
-    """
-    This method returns the first IP address string
-    that responds as the given domain name
-    """
-    try:
-        data = socket.gethostbyname(d)
-        ip = repr(data).replace("'","")
-        return ip
-    except Exception:
-        # fail gracefully!
-        return False
-def process(config, section, parts, time_parts):
-    # TCP
-    #  parts[0]: date
-    #  parts[1]: time_parts
-    #  parts[2]: plugin
-    #  parts[3]: session
-    #  parts[4]: protocol
-    #  parts[5]: event
-    #  parts[6]: local_host
-    #  parts[7]: local_port
-    #  parts[8]: service
-    #  parts[9]: remote_host
-    #  parts[10]: remote_port
-    #  parts[11]: data
-    # UDP
-    #  parts[0]: date
-    #  parts[1]: time_parts
-    #  parts[2]: plugin string part
-    #  parts[3]: plugin string part
-    #  parts[4]: session
-    #  parts[5]: protocol
-    #  parts[6]: event
-    #  parts[7]: local_host
-    #  parts[8]: local_port
-    #  parts[9]: service
-    #  parts[10]: remote_host
-    #  parts[11]: remote_port
-    #  parts[12]: data
-    if parts[4] == 'TCP':
-        if len(parts) == 11:
-            parts.append('')  # no data for CONNECT events
-        post(config, section, parts[0], time_parts[0], parts[0] + ' ' + time_parts[0], time_parts[1], parts[3],
-             parts[4], parts[5], parts[6], parts[7], parts[8], parts[9], parts[10], parts[11])
+
+def datetime2rfc3339(dt, is_utc=False):
+    if is_utc == False:
+        # calculating timezone
+        d1 = datetime.now()
+        d2 = datetime.utcnow()
+        diff_hr = (d1 - d2).seconds / 60 / 60
+        tz = u""
+
+        if diff_hr == 0:
+            tz = u"Z"
+        else:
+            if diff_hr > 0:
+                tz = u"+%s" % (tz)
+
+            tz = u"%s%.2d%.2d" % (tz, diff_hr, 0)
+
+        return u"%s%s" % (dt.strftime(u"%Y-%m-%dT%H:%M:%S.%f"), tz)
+
     else:
-        # UDP splits differently (see comment section above)
-        if len(parts) == 12:
-            parts.append('')  # no data sent
-        post(config, section, parts[0], time_parts[0], parts[0] + ' ' + time_parts[0], time_parts[1], parts[4],
-             parts[5], parts[6], parts[7], parts[8], parts[9], parts[10], parts[11], parts[12])
+        return dt.isoformat() + u'Z'
 
-def post(config, section, date, time, date_time, millisecond, session, protocol, event, local_host, local_port, service,
-         remote_host, remote_port, data):
 
-    syslog_server = config.get('syslog', 'syslog_server')
-    syslog_protocol = config.get('syslog', 'syslog_protocol')
-    syslog_program = config.get('syslog', 'syslog_program')
-    if syslog_program == "hostname":
-        syslog_program = socket.gethostname()
-    syslog_port = int(config.get('syslog', 'syslog_port'))
-    syslog_facility = int(config.get('syslog', 'syslog_facility'))
-    syslog_severity = int(config.get('syslog', 'syslog_severity'))
-    ip_address = getIP(syslog_server)
-    syslog_client = pysyslogclient.SyslogClientRFC3164(ip_address, syslog_port, proto=syslog_protocol)
-    date_time = datetime.strptime(date_time, "%Y-%m-%d %H:%M:%S").isoformat()
-    # applying [:-3] to time to truncate millisecond
-    data = {
-        'date': date,
-        'time': time,
-        'date_time': date_time,
-        'millisecond': str(millisecond)[:-3],
-        'session': session,
-        'protocol': protocol,
-        'event': event,
-        'local_host': local_host,
-        'local_port': local_port,
-        'service': service,
-        'remote_host': remote_host,
-        'remote_port': remote_port,
-        'data': data,
-        'bytes': str(len(data))
-    }
-    try:
-        payload = '\n'.join(['%s=%s' % (key, value) for (key, value) in data.items()])
-        payload = payload.encode('ascii', 'ignore')
-        syslog_client.log(payload,
-                          facility=syslog_facility,
-                          severity=syslog_severity,
-                          program=syslog_program)
-        log.msg('Sending event to syslog server %s/%s with payload %s' % (syslog_server, ip_address, payload))
-    except Exception as e:
-        log.msg('Error posting to %s : %s' % (section, str(e.message).strip()))
-    finally:
-        # quietly close the socket after use
-        try:
-            syslog_client.close()
-        except:
-            pass
+FAC_KERNEL = 0
+FAC_USER = 1
+FAC_MAIL = 2
+FAC_SYSTEM = 3
+FAC_SECURITY = 4
+FAC_SYSLOG = 5
+FAC_PRINTER = 6
+FAC_NETWORK = 7
+FAC_UUCP = 8
+FAC_CLOCK = 9
+FAC_AUTH = 10
+FAC_FTP = 11
+FAC_NTP = 12
+FAC_LOG_AUDIT = 13
+FAC_LOG_ALERT = 14
+FAC_CLOCK2 = 15
+FAC_LOCAL0 = 16
+FAC_LOCAL1 = 17
+FAC_LOCAL2 = 18
+FAC_LOCAL3 = 19
+FAC_LOCAL4 = 20
+FAC_LOCAL5 = 21
+FAC_LOCAL6 = 22
+FAC_LOCAL7 = 23
+
+SEV_EMERGENCY = 0
+SEV_ALERT = 1
+SEV_CRITICAL = 2
+SEV_ERROR = 3
+SEV_WARNING = 4
+SEV_NOTICE = 5
+SEV_INFO = 6
+SEV_DEBUG = 7
+
+
+class SyslogClient(object):
+    u"""
+    >>> client = SyslogClient("localhost", 10514)
+    >>> client.log("test")
+    """
+
+    def __init__(self, server, port, proto=u'udp', forceipv4=False, clientname=None, rfc=None, maxMessageLength=1024):
+        self.socket = None
+        self.server = server
+        self.port = port
+        self.proto = socket.SOCK_DGRAM
+        self.rfc = rfc
+        self.maxMessageLength = maxMessageLength
+        self.forceipv4 = forceipv4
+
+        if proto != None:
+            if proto.upper() == u'UDP':
+                self.proto = socket.SOCK_DGRAM
+            elif proto.upper() == u'TCP':
+                self.proto = socket.SOCK_STREAM
+
+        if clientname == None:
+            self.clientname = socket.getfqdn()
+            if self.clientname == None:
+                self.clientname = socket.gethostname()
+
+    def connect(self):
+        if self.socket == None:
+            r = socket.getaddrinfo(self.server, self.port, socket.AF_UNSPEC, self.proto)
+            if r == None:
+                return False
+
+            for (addr_fam, sock_kind, proto, ca_name, sock_addr) in r:
+                self.socket = socket.socket(addr_fam, self.proto)
+                if self.socket == None:
+                    return False
+
+                try:
+                    self.socket.connect(sock_addr)
+                    return True
+
+                except socket.timeout, e:
+                    if self.socket != None:
+                        self.socket.close()
+                        self.socket = None
+                    continue
+
+                # ensure python 2.x compatibility
+                except socket.error, e:
+                    if self.socket != None:
+                        self.socket.close()
+                        self.socket = None
+                    continue
+
+            return False
+
+        else:
+            return True
+
+    def close(self):
+        if self.socket != None:
+            self.socket.close()
+            self.socket = None
+
+    def log(self, message, timestamp=None, hostname=None, facility=None, severity=None):
+        pass
+
+    def send(self, messagedata):
+        if self.socket != None or self.connect():
+            try:
+                if self.maxMessageLength != None:
+                    self.socket.sendall(messagedata[:self.maxMessageLength])
+                else:
+                    self.socket.sendall(messagedata)
+            except IOError, e:
+                self.close()
+
+
+class SyslogClientRFC5424(SyslogClient):
+    u"""
+    >>> client = SyslogClientRFC5424("localhost", 10514, proto='udp')
+    >>> client.log("test")
+    >>> client = SyslogClientRFC5424("localhost", 10514, proto='tcp')
+    >>> client.log("test")
+    """
+
+    def __init__(self, server, port, proto=u'udp', forceipv4=False, clientname=None):
+        SyslogClient.__init__(self,
+                              server=server,
+                              port=port,
+                              proto=proto,
+                              forceipv4=forceipv4,
+                              clientname=clientname,
+                              rfc=u'5424',
+                              maxMessageLength=None,
+                              )
+
+    def log(self, message, facility=None, severity=None, timestamp=None, hostname=None, version=1, program=None,
+            pid=None, msgid=None):
+        if facility == None:
+            facility = FAC_USER
+
+        if severity == None:
+            severity = SEV_INFO
+
+        pri = facility * 8 + severity
+
+        if timestamp == None:
+            timestamp_s = datetime2rfc3339(datetime.utcnow(), is_utc=True)
+        else:
+            timestamp_s = datetime2rfc3339(timestamp, is_utc=False)
+
+        if hostname == None:
+            hostname_s = self.clientname
+        else:
+            hostname_s = hostname
+
+        if program == None:
+            appname_s = u"-"
+        else:
+            appname_s = program
+
+        if pid == None:
+            procid_s = u"-"
+        else:
+            procid_s = pid
+
+        if msgid == None:
+            msgid_s = u"-"
+        else:
+            msgid_s = msgid
+
+        d = u"<%i>%i %s %s %s %s %s %s\n" % (
+            pri,
+            version,
+            timestamp_s,
+            hostname_s,
+            appname_s,
+            procid_s,
+            msgid_s,
+            message
+        )
+
+        self.send(d.encode(u'utf-8'))
+
+
+class SyslogClientRFC3164(SyslogClient):
+    u"""
+    >>> client = SyslogClientRFC3164("localhost", 10514, proto='udp')
+    >>> client.log("test")
+    >>> client = SyslogClientRFC3164("localhost", 10514, proto='tcp')
+    >>> client.log("test")
+    """
+
+    def __init__(self, server, port, proto=u'udp', forceipv4=False, clientname=None):
+        SyslogClient.__init__(self,
+                              server=server,
+                              port=port,
+                              proto=proto,
+                              forceipv4=forceipv4,
+                              clientname=clientname,
+                              rfc=u'3164',
+                              maxMessageLength=1024,
+                              )
+
+    def log(self, message, facility=None, severity=None, timestamp=None, hostname=None, program=u"SyslogClient",
+            pid=None):
+        if facility == None:
+            facility = FAC_USER
+
+        if severity == None:
+            severity = SEV_INFO
+
+        pri = facility * 8 + severity
+
+        if timestamp == None:
+            t = datetime.now()
+        else:
+            t = timestamp
+
+        timestamp_s = t.strftime(u"%b %d %H:%M:%S")
+
+        if hostname == None:
+            hostname_s = self.clientname
+        else:
+            hostname_s = hostname
+
+        tag_s = u""
+        if program == None:
+            tag_s += u"SyslogClient"
+        else:
+            tag_s += program
+
+        if pid != None:
+            tag_s += u"[%i]" % (pid)
+
+        d = u"<%i>%s %s %s: %s\n" % (
+            pri,
+            timestamp_s,
+            hostname_s,
+            tag_s,
+            message
+        )
+
+        self.send(d.encode(u'ASCII', u'ignore'))
+
+
+if __name__ == u'__main__':
+    import doctest
+
+    doctest.testmod()
