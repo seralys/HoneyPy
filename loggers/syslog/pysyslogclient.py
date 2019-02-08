@@ -6,7 +6,6 @@
 import sys
 from datetime import datetime
 from twisted.python import log
-import pysyslogclient
 import socket
 # prevent creation of compiled bytecode files
 sys.dont_write_bytecode = True
